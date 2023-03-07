@@ -2,124 +2,108 @@
 #include "include/vitasdk.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <psp2/kernel/processmgr.h>
+#include <psp2/ctrl.h>
 
 #include "../common/debugScreen.h"
 
 #define printf psvDebugScreenPrintf
 
-struct node
+#define KEYBOARD_UP 0x10
+#define KEYBOARD_DOWN 0x40
+#define KEYBOARD_LEFT 0x80
+#define KEYBOARD_RIGHT 0x20
+
+SceCtrlData ctrl;
+
+typedef struct Tile
 {
-	int key;
-	struct node *left, *right;
+	char symbol;
+	uint32_t color;
+} Tile;
+
+const Tile wall = {'#', 6};
+const Tile floor_tile = {'.', 2};
+
+Tile map[16][16] = {
+	{wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, wall, wall, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, floor_tile, floor_tile, wall},
+	{wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall},
 };
 
-struct node *newNode(int item)
-{
-	struct node *temp = (struct node *)malloc(sizeof(struct node));
-	temp->key = item;
-	temp->left = temp->right = NULL;
-	return temp;
-}
+int x_coord = 1;
+int y_coord = 1;
 
-void inorder(struct node *root)
+void move_character()
 {
-	if (root != NULL)
+	// return curser to top of screen
+	printf("\e[H");
+	for (int i = 0; i < 16; i++)
 	{
-		// Traverse left
-		inorder(root->left);
-
-		// Traverse root
-		printf("%d -> ", root->key);
-
-		// Traverse right
-		inorder(root->right);
-	}
-}
-
-struct node *insert(struct node *node, int key)
-{
-	// Return a new node if the tree is empty
-	if (node == NULL)
-		return newNode(key);
-
-	// Traverse to the right place and insert the node
-	if (key < node->key)
-		node->left = insert(node->left, key);
-	else
-		node->right = insert(node->right, key);
-
-	return node;
-}
-
-struct node *minValueNode(struct node *node)
-{
-	struct node *current = node;
-
-	// Find the leftmost leaf
-	while (current && current->left != NULL)
-		current = current->left;
-
-	return current;
-}
-
-struct node *deleteNode(struct node *root, int key)
-{
-	// Return if the tree is empty
-	if (root == NULL)
-		return root;
-
-	// Find the node to be deleted
-	if (key < root->key)
-		root->left = deleteNode(root->left, key);
-	else if (key > root->key)
-		root->right = deleteNode(root->right, key);
-
-	else
-	{
-		if (root->left == NULL)
+		for (int j = 0; j < 16; j++)
 		{
-			struct node *temp = root->right;
-			free(root);
-			return temp;
+			if (i == y_coord && j == x_coord)
+			{
+				map[i][j].symbol = '@';
+			}
+			printf("%c", map[i][j].symbol);
 		}
-		else if (root->right == NULL)
-		{
-			struct node *temp = root->left;
-			free(root);
-			return temp;
-		}
-
-		// If the node has two children
-		struct node *temp = minValueNode(root->right);
-
-		// Place the inorder successor in position of the node to be deleted
-		root->key = temp->key;
-
-		// Delete the inorder successor
-		root->right = deleteNode(root->right, temp->key);
+		printf("\n");
 	}
-	return root;
+	// up = 0x10, down = 0x40, left = 0x80, right = 0x20;
+	printf("Buttons:%X ", ctrl.buttons);
+	sceKernelDelayThread(100000);
 }
+
 int main(int argc, char *argv[])
 {
-
 	psvDebugScreenInit();
-	psvDebugScreenSetBgColor(25135);
+	const int font = psvDebugScreenGetFont();
+	const int larger_font = psvDebugScreenScaleFont2x(font);
+	psvDebugScreenSetFont(larger_font);
+	// to enable analog sampling
+	sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
 
-	struct node *root = NULL;
-	root = insert(root, 8);
-	root = insert(root, 3);
-	root = insert(root, 4550);
-	root = insert(root, 6);
-	root = insert(root, 7);
-	root = insert(root, 10);
-	root = insert(root, 99595);
-	root = insert(root, 4);
+	move_character();
+	do
+	{
+		sceCtrlPeekBufferPositive(0, &ctrl, 1);
+		switch (ctrl.buttons)
+		{
+		case KEYBOARD_RIGHT:
+			x_coord += 1;
+			move_character();
+			break;
+		case KEYBOARD_DOWN:
+			y_coord += 1;
+			move_character();
+			break;
+		case KEYBOARD_UP:
+			y_coord -= 1;
+			move_character();
+			break;
+		case KEYBOARD_LEFT:
+			x_coord -= 1;
+			move_character();
+			break;
+		default:
+			break;
+		}
+	} while (ctrl.buttons != (SCE_CTRL_START | SCE_CTRL_SELECT | SCE_CTRL_LTRIGGER | SCE_CTRL_RTRIGGER));
 
-	printf("Inorder traversal: ");
-	inorder(root);
-
-	sceKernelDelayThread(3 * 1000000); // Wait for 3 seconds
 	sceKernelExitProcess(0);
 	return 0;
 }
