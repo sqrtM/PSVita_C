@@ -19,6 +19,11 @@ SceCtrlData ctrl;
 /*
 TODO: put all these structs into header files
 so they can can be compile time constant.
+
+additionally, the default values for these,
+like the WALL_SYMBOL should be defined at the top
+so they don't have to be compile timed and they can
+just be grabbed from the top.
 */
 typedef struct Location
 {
@@ -31,6 +36,7 @@ typedef struct Tile
 	char default_symbol;
 	char symbol;
 	uint32_t color;
+	uint32_t default_color;
 } Tile;
 
 typedef struct Player
@@ -39,8 +45,8 @@ typedef struct Player
 	location location;
 } player;
 
-const Tile wall = {'#', '#', 0};
-const Tile floor_tile = {'.', '.', 2};
+const Tile wall = {'#', '#', 90, 90};
+const Tile floor_tile = {'.', '.', 92, 92};
 
 Tile map[16][16] = {
 	{wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall},
@@ -51,15 +57,57 @@ Tile map[16][16] = {
 	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
 	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
 	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
 	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
-	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
-	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
-	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, wall, wall, wall},
-	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, wall, wall, wall, wall, wall, wall, wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
+	{wall, floor_tile, floor_tile, wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, wall, wall, wall},
+	{wall, floor_tile, floor_tile, wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall},
 	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, floor_tile, floor_tile, wall},
 	{wall, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, floor_tile, wall, floor_tile, floor_tile, wall},
 	{wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall, wall},
 };
+
+/**
+ * thank u redblobgames for the write up on how to do good, grid based
+ * linear interpolation.
+ * https://www.redblobgames.com/grids/line-drawing.html#interpolation-points
+*/
+int lerp(struct Location p0, struct Location p1)
+{
+	int dx = p0.x - p1.x, dy = p0.y - p1.y;
+	int nx = dx < 0 ? dx * -1 : dx, ny = dy < 0 ? dy * -1 : dy;
+	int sign_x = dx < 0 ? 1 : -1, sign_y = dy < 0 ? 1 : -1;
+
+	struct Location *p;
+	p = malloc(sizeof(location));
+	p->x = p0.x;
+	p->y = p0.y;
+
+	int dark_tile = 0;
+
+	for (int ix = 0, iy = 0; ix < nx || iy < ny;)
+	{
+		if ((0.5 + ix) / nx < (0.5 + iy) / ny)
+		{
+			// next step is horizontal
+			p->x += sign_x;
+			ix++;
+		}
+		else
+		{
+			// next step is vertical
+			p->y += sign_y;
+			iy++;
+		}
+		if (map[p->y][p->x].default_symbol == '#')
+		{
+			dark_tile = 1;
+			break;
+		}
+	}
+	free(p);
+	return dark_tile;
+}
 
 void move_character(struct Player *player)
 {
@@ -70,19 +118,34 @@ void move_character(struct Player *player)
 	{
 		for (int j = 0; j < 16; j++)
 		{
-            if (i == player->location.y && j == player->location.x)
-            {
+			if (i == player->location.y && j == player->location.x)
+			{
 				map[i][j].symbol = player->symbol;
-			} else {
-				map[i][j].symbol = map[i][j].default_symbol;
 			}
-			printf("\e[9%im%c", map[i][j].color, map[i][j].symbol);
+			else
+			{
+				struct Location *tile_location;
+				tile_location = malloc(sizeof(struct Location));
+				tile_location->x = j;
+				tile_location->y = i;
+				int tile_dark = lerp(player->location, *tile_location);
+				map[i][j].symbol = map[i][j].default_symbol;
+				if (tile_dark == 1)
+				{
+					map[i][j].color = 2;
+				}
+				else
+				{
+					map[i][j].color = map[i][j].default_color;
+				}
+				free(tile_location);
+			}
+			printf("\e[%im%c", map[i][j].color, map[i][j].symbol);
 		}
 		printf("\n");
 	}
-	// up = 0x10, down = 0x40, left = 0x80, right = 0x20;
-	// printf("Buttons:%X ", ctrl.buttons);
-	printf("Buttons:%X ", player->location.y);
+	// busy wait so the player can't just
+	// zip across the screen.
 	sceKernelDelayThread(100000);
 }
 
