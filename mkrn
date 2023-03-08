@@ -1,0 +1,4 @@
+#!/bin/bash
+make
+cd /d/emulators/Vita3k
+./vita3k.exe /d/repos/samples/psvita_c/project.vpk
