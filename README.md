@@ -5,4 +5,4 @@ going to make a little game in the debug console while I get aquainted with the 
 
 run the included bash script $ ./mkrn to build and run the game in an emulator on the path
 
-![image](https://user-images.githubusercontent.com/79169638/223858486-681b80eb-a51e-4cd5-9fda-36d3b9abba83.png)
+![image](https://user-images.githubusercontent.com/79169638/224016365-9765f4eb-a00c-484e-8cbb-4afc8418be55.png)
