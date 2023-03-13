@@ -17,13 +17,12 @@
 SceCtrlData ctrl;
 
 /*
-TODO: put all these structs into header files
-so they can can be compile time constant.
+~~TODO: put all these structs into header files
+so they can can be compile time constant.~~
 
-additionally, the default values for these,
-like the w_t_SYMBOL should be defined at the top
-so they don't have to be compile timed and they can
-just be grabbed from the top.
+BETTER YET : lets make an XML file that holds all this info
+then we can parse it out and save on headers and non-compiled stuff. 
+
 */
 typedef struct Location
 {
@@ -85,10 +84,10 @@ Tile map[28][48] = {
  * linear interpolation.
  * https://www.redblobgames.com/grids/line-drawing.html#interpolation-points
  */
-int lerp(struct Location p0, struct Location p1)
+int lerp(struct Player *player, struct Location p1)
 {
 	// get differences
-	int dx = p0.x - p1.x, dy = p0.y - p1.y;
+	int dx = player->location.x - p1.x, dy = player->location.y - p1.y;
 	// get the abs of those differences
 	int nx = dx < 0 ? dx * -1 : dx, ny = dy < 0 ? dy * -1 : dy;
 	// decide the direction to trace the line
@@ -96,8 +95,8 @@ int lerp(struct Location p0, struct Location p1)
 
 	struct Location *p;
 	p = malloc(sizeof(location));
-	p->x = p0.x;
-	p->y = p0.y;
+	p->x = player->location.x;
+	p->y = player->location.y;
 
 	int dark_tile = 0;
 
@@ -118,7 +117,10 @@ int lerp(struct Location p0, struct Location p1)
 		}
 		if (map[p->y][p->x].default_symbol == '#')
 		{
-			map[p->y][p->x].seen = 1;
+			if (player->symbol == '@')
+			{
+				map[p->y][p->x].seen = 1;
+			}
 			dark_tile = 1;
 			break;
 		}
@@ -158,7 +160,7 @@ void move_character(struct Player *player)
 				tile_location = malloc(sizeof(struct Location));
 				tile_location->x = j;
 				tile_location->y = i;
-				int tile_behind_w_t = lerp(player->location, *tile_location);
+				int tile_behind_w_t = lerp(player, *tile_location);
 				map[i][j].symbol = map[i][j].default_symbol;
 
 				// if it has not been seen
@@ -174,8 +176,11 @@ void move_character(struct Player *player)
 					{
 						// we mark it as seen
 						// and paint it bright green
-						map[i][j].seen = 1;
-						map[i][j].color = 92;
+						if (player->symbol == '@')
+						{
+							map[i][j].seen = 1;
+							map[i][j].color = 92;
+						}
 					}
 				}
 				// if we HAVE already seen it.
@@ -185,12 +190,18 @@ void move_character(struct Player *player)
 					if (tile_behind_w_t == 1)
 					{
 						// we paint it dark green
-						map[i][j].color = 32;
+						if (player->symbol == '@')
+						{
+							map[i][j].color = 36;
+						}
 					}
 					else
 					{
 						// we paint it bright green
-						map[i][j].color = 92;
+						if (player->symbol == '@')
+						{
+							map[i][j].color = map[i][j].default_color;
+						}
 					}
 				}
 				free(tile_location);
@@ -261,6 +272,76 @@ int main(int argc, char *argv[])
 			break;
 		default:
 			break;
+		}
+		if (ctrl.buttons == SCE_CTRL_TRIANGLE)
+		{
+			struct Player *cursor;
+			cursor = malloc(sizeof(player));
+			cursor->symbol = '+';
+			cursor->location.x = player->location.x;
+			cursor->location.y = player->location.y;
+
+			do
+			{
+				sceCtrlPeekBufferPositive(0, &ctrl, 1);
+				switch (ctrl.buttons)
+				{
+				case KEYBOARD_RIGHT:
+					cursor->location.x += 1;
+					if (map[cursor->location.y][cursor->location.x].color == 30)
+					{
+						do
+						{
+							cursor->location.x += 1;
+						} while (map[cursor->location.y][cursor->location.x].color == 30 && cursor->location.x < 48);
+					}
+					move_character(cursor);
+					break;
+				case KEYBOARD_DOWN:
+					cursor->location.y += 1;
+					if (map[cursor->location.y][cursor->location.x].color == 30)
+					{
+						do
+						{
+							cursor->location.y += 1;
+						} while (map[cursor->location.y][cursor->location.x].color == 30 && cursor->location.y < 28);
+					}
+					move_character(cursor);
+					break;
+				case KEYBOARD_UP:
+					cursor->location.y -= 1;
+					if (map[cursor->location.y][cursor->location.x].color == 30)
+					{
+						do
+						{
+							cursor->location.y -= 1;
+						} while (map[cursor->location.y][cursor->location.x].color == 30 && cursor->location.y > 0);
+					}
+					move_character(cursor);
+					break;
+				case KEYBOARD_LEFT:
+					cursor->location.x -= 1;
+					if (map[cursor->location.y][cursor->location.x].color == 30)
+					{
+						do
+						{
+							cursor->location.x -= 1;
+						} while (map[cursor->location.y][cursor->location.x].color == 30 && cursor->location.x > 0);
+					}
+					move_character(cursor);
+					break;
+				case SCE_CTRL_CROSS:
+					do
+					{
+						printf("\e[0;50H");
+						printf("\e[%im%c", 31, map[cursor->location.y][cursor->location.x].default_symbol);
+					} while (ctrl.buttons != SCE_CTRL_CROSS);
+
+				default:
+					break;
+				}
+			} while (ctrl.buttons != SCE_CTRL_TRIANGLE);
+			free(cursor);
 		}
 	} while (ctrl.buttons != (SCE_CTRL_START | SCE_CTRL_SELECT | SCE_CTRL_LTRIGGER | SCE_CTRL_RTRIGGER));
 
